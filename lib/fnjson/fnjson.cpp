@@ -181,9 +181,8 @@ std::string FNJSON::getValue(cJSON *item)
     if (cJSON_IsString(item))
     {
         char *strValue = cJSON_GetStringValue(item);
-        // Debug_printf("S: [cJSON_IsString] %s\r\n", strValue);
 #ifdef VERBOSE_PROTOCOL
-        Debug_printf("S: [cJSON_IsString] ... (not printing)\r\n");
+        Debug_printf("S: [cJSON_IsString] %s\r\n", strValue);
 #endif
         ss << processString(strValue + lineEnding);
     }
@@ -228,10 +227,13 @@ std::string FNJSON::getValue(cJSON *item)
     }
     else if (cJSON_IsObject(item))
     {
+        std::string oldLineEnding = lineEnding;
         #ifdef BUILD_IEC
             // Set line ending when returning multiple values
             setLineEnding("\x0a");
         #endif
+        setLineEnding("\n");
+
 
         if (item->child == NULL)
         {
@@ -256,15 +258,20 @@ std::string FNJSON::getValue(cJSON *item)
                 ss << lineEnding + getValue(item);
             } while ((item = item->next) != NULL);
         }
+        setLineEnding(oldLineEnding);
 
     }
     else if (cJSON_IsArray(item))
     {
+        std::string oldLineEnding = lineEnding;
+        setLineEnding("\n");
+
         cJSON *child = item->child;
         do
         {
             ss << getValue(child);
         } while ((child = child->next) != NULL);
+        setLineEnding(oldLineEnding);
     }
     else
         ss << "UNKNOWN" + lineEnding;
