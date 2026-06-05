@@ -151,6 +151,10 @@ public:
 #endif
 
     static esp_err_t post_handler_config(httpd_req_t *req);
+
+    // Google Drive OAuth2 relay-based endpoints
+    static esp_err_t get_handler_gdrive_auth(httpd_req_t *req);
+    static esp_err_t get_handler_gdrive_poll(httpd_req_t *req);
 #else
 // !ESP_PLATFORM
     static int get_handler_print(struct mg_connection *c);
@@ -168,6 +172,10 @@ public:
 
     static int get_handler_browse(mg_connection *c, mg_http_message *hm);
     static int get_handler_shorturl(mg_connection *c, mg_http_message *hm);
+
+    // Google Drive OAuth2 relay-based endpoints
+    static int get_handler_gdrive_auth(struct mg_connection *c, struct mg_http_message *hm);
+    static int get_handler_gdrive_poll(struct mg_connection *c, struct mg_http_message *hm);
 
     static std::vector<struct mg_connection*> m_sseClients;
     static size_t m_lastOutputSize;

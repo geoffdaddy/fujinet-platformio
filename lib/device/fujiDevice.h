@@ -11,6 +11,7 @@
 #include <string>
 #include <optional>
 #include <map>
+#include <atomic>
 
 #if defined(BUILD_ATARI) || defined(BUILD_LYNX)
 #define SYSTEM_BUS_IS_UDP 1
@@ -143,6 +144,8 @@ protected:
     int _current_open_directory_slot = -1;
     uint8_t _countScannedSSIDs = 0;
 
+    std::atomic<bool> _startup_mount_lock{false};
+
     Hash::Algorithm algorithm = Hash::Algorithm::UNKNOWN;
 
     virtual void transaction_begin(transState_t expectMoreData) = 0;
@@ -255,11 +258,12 @@ public:
     success_is_true fujicore_unmount_disk_image_success(uint8_t deviceSlot);
     success_is_true fujicore_mount_host_success(unsigned hostSlot);
     success_is_true fujicore_mount_all_success();
+    success_is_true fujicore_mount_all_at_startup();
     void fujicore_net_scan_networks();
     success_is_true fujicore_net_set_ssid_success(const char *ssid, const char *password, bool save);
 
     // Should be protected but being called by drivewire.cpp
-    void insert_boot_device(uint8_t image_id, mediatype_t disk_type, DISK_DEVICE *disk_dev);
+    virtual void insert_boot_device(uint8_t image_id, mediatype_t disk_type, DISK_DEVICE *disk_dev);
     void insert_boot_device(std::string boot_img, mediatype_t disk_type, DISK_DEVICE *disk_dev);
 };
 

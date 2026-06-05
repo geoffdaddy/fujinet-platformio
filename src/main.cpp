@@ -533,10 +533,21 @@ void fn_service_loop(void *param)
         fnWiFi.connect();
     }
 
-    // if we dont have config enabled, and no alternate config disk selected, then just mount what we have
-    // in here so we are after all of the setup and wifi has been started
+    // If we don't have config enabled, and no alternate config disk
+    // selected, then just mount what we have so we are after all of
+    // the setup and wifi has been started.
+    //
     if (!Config.get_general_config_enabled() && Config.get_config_filename().empty())
-        theFuji->fujicmd_mount_all_success();
+        theFuji->fujicore_mount_all_at_startup();
+
+#ifdef BUILD_ADAM
+    // All devices registered and disks mounted: hand the AdamNet bus to its own
+    // high-priority core-1 task so it services the one-wire bus continuously and
+    // can't be stalled by WiFi/scheduler latency mid-handshake (the desync that
+    // caused intermittent "Drive Error" under PIP *.*[V]). Must be after the mount
+    // above so the task never races device registration / direct-UART setup probes.
+    SYSTEM_BUS.start_bus_task();
+#endif
 
     // Main service loop
 #ifdef ESP_PLATFORM
@@ -560,7 +571,12 @@ void fn_service_loop(void *param)
         Debug_printv("Low Heap: %lu",esp_get_free_internal_heap_size());
   #endif
 #endif
+#ifndef BUILD_ADAM
+        // ADAM runs the bus service in its own high-priority core-1 task
+        // (see adamnet_bus_task); calling it here too would double-service the
+        // UART from two tasks and race. Every other platform services it here.
         SYSTEM_BUS.service();
+#endif
 
 #ifdef ESP_PLATFORM
         taskYIELD(); // Allow other tasks to run

@@ -1453,7 +1453,7 @@ int ssh_options_apply(ssh_session session) {
     session->opts.knownhosts = tmp;
     #else
     if (session->opts.knownhosts != NULL) free(session->opts.knownhosts);
-    session->opts.knownhosts = "";
+    session->opts.knownhosts = NULL;
     #endif
 
     #ifndef LIBSSH_FUJINET
@@ -1469,7 +1469,7 @@ int ssh_options_apply(ssh_session session) {
     session->opts.global_knownhosts = tmp;
     #else
     if (session->opts.global_knownhosts != NULL) free(session->opts.global_knownhosts);
-    session->opts.global_knownhosts = "";
+    session->opts.global_knownhosts = NULL;
     #endif
 
     if (session->opts.ProxyCommand != NULL) {

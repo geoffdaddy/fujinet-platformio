@@ -175,6 +175,25 @@ success_is_true fujiDevice::fujicmd_mount_all_success()
     RETURN_SUCCESS_AS_TRUE();
 }
 
+success_is_true fujiDevice::fujicore_mount_all_at_startup()
+{
+    bool was_locked = _startup_mount_lock.exchange(true);
+    if (was_locked) {
+        Debug_println("::fujicore_mount_all_at_startup: another caller "
+                      "already owns the startup mount, skipping");
+        RETURN_SUCCESS_AS_TRUE();
+    }
+
+    success_is_true result = fujicore_mount_all_success();
+    if (!result) {
+        // Release the lock so a later startup caller (typically the
+        // IP_EVENT_STA_GOT_IP handler) can retry.  On success we
+        // intentionally keep the lock held forever.
+        _startup_mount_lock.store(false);
+    }
+    return result;
+}
+
 // This gets called when we're about to shutdown/reboot
 void fujiDevice::shutdown()
 {
@@ -567,7 +586,7 @@ void fujiDevice::insert_boot_device(std::string boot_img, mediatype_t disk_type,
         return;
     }
 
-    image_size = fsFlash.filesize(fBoot);
+    image_size = FileSystem::filesize(fBoot);
     disk_dev->mount(fBoot, boot_img.c_str(), image_size, DISK_ACCESS_MODE_READ, disk_type);
     disk_dev->is_config_device = true;
 }
@@ -831,13 +850,6 @@ std::optional<std::string> fujiDevice::fujicore_read_directory_entry(size_t maxl
         return std::nullopt;
     }
 
-    // detect block mode in request
-    if ((addtl & 0xC0) == 0xC0)
-    {
-        fujicmd_read_directory_block(maxlen, addtl & 0x3F);
-        return std::nullopt;
-    }
-
     fsdir_entry_t *entry = _fnHosts[_current_open_directory_slot].dir_nextfile();
 
     if (entry == nullptr)
@@ -879,6 +891,21 @@ std::optional<std::string> fujiDevice::fujicore_read_directory_entry(size_t maxl
 
 void fujiDevice::fujicmd_read_directory_entry(size_t maxlen, uint8_t addtl)
 {
+    if (_current_open_directory_slot == -1)
+    {
+        Debug_print("READ DIRECTORY ENTRY: No currently open directory\n");
+        transaction_error();
+        return;
+    }
+
+    // Block mode (addtl $C0-$FF) is handled entirely by fujicmd_read_directory_block,
+    // which owns the SIO transaction. Must not transaction_begin here first.
+    if ((addtl & 0xC0) == 0xC0)
+    {
+        fujicmd_read_directory_block(maxlen, addtl & 0x3F);
+        return;
+    }
+
     transaction_begin(TRANS_STATE::NO_GET);
     Debug_printf("Fuji cmd: READ DIRECTORY ENTRY (max=%hu) (addtl=%02x)\n", maxlen, addtl);
 

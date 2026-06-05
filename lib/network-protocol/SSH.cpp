@@ -18,6 +18,7 @@
 
 #include "status_error_codes.h"
 
+#include <cstdlib>
 #include <vector>
 
 #define RXBUF_SIZE 65535
@@ -45,16 +46,25 @@ NetworkProtocolSSH::NetworkProtocolSSH(std::string *rx_buf, std::string *tx_buf,
 #else
     rxbuf = (char *)malloc(RXBUF_SIZE);
 #endif
+    if (rxbuf == nullptr)
+    {
+        Debug_printf("NetworkProtocolSSH::NetworkProtocolSSH() - rxbuf allocation FAILED (%u bytes)\r\n",
+                     (unsigned)RXBUF_SIZE);
+    }
 }
 
 NetworkProtocolSSH::~NetworkProtocolSSH()
 {
     Debug_printf("NetworkProtocolSSH::~NetworkProtocolSSH()\r\n");
+    if (rxbuf != nullptr)
+    {
 #ifdef ESP_PLATFORM
-    heap_caps_free(rxbuf);
+        heap_caps_free(rxbuf);
 #else
-    free(rxbuf);
+        free(rxbuf);
 #endif
+        rxbuf = nullptr;
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -313,7 +323,17 @@ fujiError_t NetworkProtocolSSH::open(PeoplesUrlParser *urlParser,
         return FUJI_ERROR::UNSPECIFIED;
     }
 
-    ret = ssh_channel_request_pty_size(channel, "vanilla", 80, 24);
+    // Terminal type and size come from the URL query (?term=...&cols=..&rows=..),
+    // so the remote host learns them in the pty request. When a value is absent
+    // we keep the original default (vanilla / 80 / 24) - unchanged behavior.
+    std::string term = urlParser->queryParam("term", "vanilla");
+    int cols = atoi(urlParser->queryParam("cols", "80").c_str());
+    int rows = atoi(urlParser->queryParam("rows", "24").c_str());
+    if (cols <= 0) cols = 80;
+    if (rows <= 0) rows = 24;
+
+    ret = ssh_channel_request_pty_size(channel, term.c_str(), cols, rows);
+
     if (ret != SSH_OK)
     {
         error = NDEV_STATUS::GENERAL;
@@ -339,9 +359,22 @@ fujiError_t NetworkProtocolSSH::open(PeoplesUrlParser *urlParser,
 
 fujiError_t NetworkProtocolSSH::close()
 {
-    ssh_disconnect(session);
-    ssh_free(session);
-    return FUJI_ERROR::NONE;
+    if (channel != nullptr)
+    {
+        ssh_channel_send_eof(channel);
+        ssh_channel_close(channel);
+        ssh_channel_free(channel);
+        channel = nullptr;
+    }
+
+    if (session != nullptr)
+    {
+        ssh_disconnect(session);
+        ssh_free(session);
+        session = nullptr;
+    }
+
+    return NetworkProtocol::close();
 }
 
 fujiError_t NetworkProtocolSSH::read(unsigned short len)
@@ -377,12 +410,12 @@ size_t NetworkProtocolSSH::available()
 {
     if (receiveBuffer->length() == 0)
     {
-        if (ssh_channel_is_eof(channel) == 0)
+        if (channel != nullptr && ssh_channel_is_eof(channel) == 0)
         {
             int len = ssh_channel_read(channel, rxbuf, RXBUF_SIZE, 0);
-            if (len != SSH_AGAIN)
+            if (len > 0)
             {
-                receiveBuffer->append(rxbuf, len);
+                receiveBuffer->append(rxbuf, (size_t)len);
                 translate_receive_buffer();
             }
         }

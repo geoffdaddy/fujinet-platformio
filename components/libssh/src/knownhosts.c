@@ -222,6 +222,10 @@ static int ssh_known_hosts_read_entries(const char *match,
     FILE *fp;
     int rc;
 
+    if (filename == NULL) {
+        return SSH_OK;
+    }
+
     fp = fopen(filename, "r");
     if (fp == NULL) {
         SSH_LOG(SSH_LOG_WARN, "Failed to open the known_hosts file '%s': %s",
